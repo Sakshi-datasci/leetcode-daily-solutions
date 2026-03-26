@@ -2,92 +2,94 @@ import java.util.*;
 
 class Solution {
     public boolean canPartitionGrid(int[][] grid) {
-
-        int m = grid.length;
-        int n = grid[0].length;
-
-        long total = 0;
-
-        for (int[] row : grid) {
-            for (int val : row) total += val;
-        }
-
-       
-        long topSum = 0;
-
-        for (int i = 0; i < m - 1; i++) {
-
-            for (int j = 0; j < n; j++) {
-                topSum += grid[i][j];
-            }
-
-            long bottomSum = total - topSum;
-
-            if (topSum == bottomSum) return true;
-
-            long diff = Math.abs(topSum - bottomSum);
-
-            if (topSum > bottomSum) {
-              
-                if (canRemove(grid, 0, i, 0, n - 1, diff)) return true;
-            } else {
-               
-                if (canRemove(grid, i + 1, m - 1, 0, n - 1, diff)) return true;
-            }
-        }
-
-        
-        long leftSum = 0;
-
-        for (int j = 0; j < n - 1; j++) {
-
-            for (int i = 0; i < m; i++) {
-                leftSum += grid[i][j];
-            }
-
-            long rightSum = total - leftSum;
-
-            if (leftSum == rightSum) return true;
-
-            long diff = Math.abs(leftSum - rightSum);
-
-            if (leftSum > rightSum) {
-              
-                if (canRemove(grid, 0, m - 1, 0, j, diff)) return true;
-            } else {
-               
-                if (canRemove(grid, 0, m - 1, j + 1, n - 1, diff)) return true;
-            }
-        }
-
-        return false;
+        int m = grid.length, n = grid[0].length;
+        return checkCuts(grid, m, n, true) || checkCuts(grid, m, n, false);
     }
 
-    private boolean canRemove(int[][] grid, int r1, int r2, int c1, int c2, long diff) {
+    private boolean checkCuts(int[][] grid, int m, int n, boolean horizontal) {
+        int lines = horizontal ? m : n;
+        int otherDim = horizontal ? n : m;
 
-        int rows = r2 - r1 + 1;
-        int cols = c2 - c1 + 1;
+        long[] lineSum = new long[lines];
+        for (int i = 0; i < m; i++)
+            for (int j = 0; j < n; j++)
+                lineSum[horizontal ? i : j] += grid[i][j];
 
-        
-        if (rows > 1 && cols > 1) {
-            for (int i = r1; i <= r2; i++) {
-                for (int j = c1; j <= c2; j++) {
-                    if (grid[i][j] == diff) return true;
+        List<Map<Integer, Integer>> lineVals = new ArrayList<>();
+        for (int k = 0; k < lines; k++) lineVals.add(new HashMap<>());
+        for (int i = 0; i < m; i++)
+            for (int j = 0; j < n; j++)
+                lineVals.get(horizontal ? i : j).merge(grid[i][j], 1, Integer::sum);
+
+        Map<Integer, Integer> topCounts = new HashMap<>();
+        Map<Integer, Integer> botCounts = new HashMap<>();
+        long topSum = 0, botSum = 0;
+
+        for (int k = 0; k < lines; k++) {
+            botSum += lineSum[k];
+            for (Map.Entry<Integer, Integer> e : lineVals.get(k).entrySet())
+                botCounts.merge(e.getKey(), e.getValue(), Integer::sum);
+        }
+
+        for (int i = 0; i < lines - 1; i++) {
+            for (Map.Entry<Integer, Integer> e : lineVals.get(i).entrySet()) {
+                int val = e.getKey(), cnt = e.getValue();
+                topCounts.merge(val, cnt, Integer::sum);
+                int rem = botCounts.get(val) - cnt;
+                if (rem == 0) botCounts.remove(val);
+                else          botCounts.put(val, rem);
+            }
+            topSum += lineSum[i];
+            botSum -= lineSum[i];
+
+            long diff = topSum - botSum;
+            if (diff == 0) return true;
+
+            int topLines = i + 1;
+            int botLines = lines - i - 1;
+
+            boolean topIs2D = topLines > 1 && otherDim > 1;
+            boolean botIs2D = botLines > 1 && otherDim > 1;
+
+            if (diff > 0 && diff <= 100000) {
+                int need = (int) diff;
+                if (topCounts.containsKey(need)) {
+                    if (topIs2D) return true;
+                    // top section endpoints:
+                    // horizontal, multi-row single-col: grid[0][0] .. grid[i][0]
+                    // horizontal, single-row multi-col: grid[0][0] .. grid[0][n-1]
+                    // vertical,   multi-col single-row: grid[0][0] .. grid[0][i]
+                    // vertical,   single-col multi-row: grid[0][0] .. grid[m-1][0]
+                    int firstCell = grid[0][0];
+                    int lastCell;
+                    if (horizontal) {
+                        lastCell = (otherDim == 1) ? grid[i][0] : grid[0][n - 1];
+                    } else {
+                        lastCell = (otherDim == 1) ? grid[m - 1][0] : grid[0][i];
+                    }
+                    if (firstCell == need || lastCell == need) return true;
+                }
+            } else if (diff < 0 && -diff <= 100000) {
+                int need = (int) -diff;
+                if (botCounts.containsKey(need)) {
+                    if (botIs2D) return true;
+                    // bot section endpoints:
+                    // horizontal, multi-row single-col: grid[i+1][0] .. grid[m-1][0]
+                    // horizontal, single-row multi-col: grid[m-1][0] .. grid[m-1][n-1]
+                    // vertical,   multi-col single-row: grid[0][i+1] .. grid[0][n-1]
+                    // vertical,   single-col multi-row: grid[0][i+1] .. grid[m-1][i+1]
+                    int firstCell, lastCell;
+                    if (horizontal) {
+                        firstCell = (otherDim == 1) ? grid[i + 1][0]     : grid[m - 1][0];
+                        lastCell  = (otherDim == 1) ? grid[m - 1][0]     : grid[m - 1][n - 1];
+                    } else {
+                        firstCell = (otherDim == 1) ? grid[0][i + 1]     : grid[0][i + 1];
+                        lastCell  = (otherDim == 1) ? grid[0][n - 1]     : grid[m - 1][i + 1];
+                    }
+                    if (firstCell == need || lastCell == need) return true;
                 }
             }
-            return false;
         }
-
-       
-        if (rows == 1) {
-            return grid[r1][c1] == diff || grid[r1][c2] == diff;
-        }
-
-       
-        if (cols == 1) {
-            return grid[r1][c1] == diff || grid[r2][c1] == diff;
-        }
-
         return false;
     }
 }
